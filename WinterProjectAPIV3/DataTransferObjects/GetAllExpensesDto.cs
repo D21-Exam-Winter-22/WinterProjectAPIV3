@@ -1,0 +1,16 @@
+﻿namespace WinterProjectAPIV3.DataTransferObjects
+{
+    public class GetAllExpensesDto
+    {
+        public int? ExpenseId { get; set; }
+        public double? Amount { get; set; }
+        public int? UserId { get; set; }
+        public int? GroupId { get; set; }
+        public string? Name { get; set; }
+        public string? UserName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+    }
+}

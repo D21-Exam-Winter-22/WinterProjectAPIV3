@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\WinterProjectAPIV3.props" />
+</Project>
