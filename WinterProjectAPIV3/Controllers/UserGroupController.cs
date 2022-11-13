@@ -152,7 +152,7 @@ namespace WinterProjectAPIV3.Controllers
             
             if (ExistingUserGroupsList.Count > 0)
             {
-                return Conflict();
+                return BadRequest("Already in the group!");
             }
             if (ExistingGroup == null)
             {
@@ -321,10 +321,79 @@ namespace WinterProjectAPIV3.Controllers
             return await getAllExpensesOnGroupID((int)GroupID);
         }
 
-        public async void CalculateIndividualSharesInGroup()
+        [HttpGet("MoneyOwedByEveryoneInGroupID")]
+        public async Task<ActionResult<List<MoneyOwedByUserGroupDto>>> CalculateIndividualSharesInGroup(int GroupID)
         {
+            //Temporary fix since I don't know how to convert types:
+            var query = from expense in context.Expenses
+                join usergroup in context.UserGroups on expense.UserGroupId equals usergroup.UserGroupId
+                join sharegroup in context.ShareGroups on usergroup.GroupId equals sharegroup.GroupId
+                join shareuser in context.ShareUsers on usergroup.UserId equals shareuser.UserId
+                where usergroup.GroupId == GroupID
+                select new
+                {
+                    expense.ExpenseId,
+                    expense.Amount,
+                    usergroup.UserId,
+                    usergroup.GroupId,
+                    sharegroup.Name,
+                    shareuser.UserName,
+                    shareuser.PhoneNumber,
+                    shareuser.FirstName,
+                    shareuser.LastName,
+                    shareuser.Email
+                };
+            List<GetAllExpensesDto> QueriedList = new List<GetAllExpensesDto>();
+            List<MoneyOwedByUserGroupDto> MoneyOwedByUserGroupList = new List<MoneyOwedByUserGroupDto>();
+            foreach (var record in query)
+            {
+                QueriedList.Add(new GetAllExpensesDto
+                {
+                    ExpenseId = record.ExpenseId,
+                    Amount = record.Amount,
+                    UserId = record.UserId,
+                    GroupId = record.GroupId,
+                    Name = record.Name,
+                    UserName = record.UserName,
+                    PhoneNumber = record.PhoneNumber,
+                    FirstName = record.FirstName,
+                    LastName = record.LastName,
+                    Email = record.Email
+                });
+                
+                //Set the amount owed temporarily to how much each one has spent
+                MoneyOwedByUserGroupList.Add(new MoneyOwedByUserGroupDto
+                {
+                    UserID = (int)record.UserId,
+                    GroupID = (int)record.GroupId,
+                    AmountOwed = -(double)record.Amount
+                });
+            }
+
+            double? TotalExpenditure = 0;
+            int? GroupSize = 0;
+
+            foreach (GetAllExpensesDto record in QueriedList)
+            {
+                TotalExpenditure += record.Amount;
+                GroupSize++;
+            }
+
+            double? AveragePayment = TotalExpenditure / GroupSize;
             
+            //Now that we have the average amount paid, We can deduct that from everyone's amount owed
+
+            foreach (MoneyOwedByUserGroupDto user in MoneyOwedByUserGroupList)
+            {
+                user.AmountOwed += (int)AveragePayment;
+            }
+            
+            //Calculate how much everyone has already paid, and 
+
+            return MoneyOwedByUserGroupList;
         }
+        
+        
 
 
     }
