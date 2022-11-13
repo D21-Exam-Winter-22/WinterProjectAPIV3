@@ -5,4 +5,6 @@ public class MoneyOwedByUserGroupDto
     public int UserID { get; set; }
     public int GroupID { get; set; }
     public double AmountOwed { get; set; }
+    
+    public double AmountAlreadyPaid { get; set; }
 }
