@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WinterProjectAPIV3.DataTransferObjects;
@@ -231,7 +232,7 @@ namespace WinterProjectAPIV3.Controllers
                     Amount = record.Amount,
                     UserId = record.UserId,
                     GroupId = record.GroupId,
-                    Name = record.Name,
+                    GroupName = record.Name,
                     UserName = record.UserName,
                     PhoneNumber = record.PhoneNumber,
                     FirstName = record.FirstName,
@@ -324,8 +325,84 @@ namespace WinterProjectAPIV3.Controllers
         [HttpGet("MoneyOwedByEveryoneInGroupID/{GroupID}")]
         public async Task<ActionResult<List<MoneyOwedByUserGroupDto>>> CalculateIndividualSharesInGroup(int GroupID)
         {
-           
-            return Ok();
+            //Calculating how much everyone paid from the group
+            List<Expense> AllExpensesQuery = await context.Expenses
+                .Include(Expense => Expense.UserGroup)
+                .Include(Expense => Expense.UserGroup.User)
+                .Include(Expense => Expense.UserGroup.Group)
+                .Where(UserGroup => UserGroup.UserGroup.GroupId == GroupID)
+                .ToListAsync();
+            
+            // Group by UserID and sum the Amount
+            //Get all the distinct UserIDs
+            List<int> DistinctUserIDs = 
+                AllExpensesQuery.Select(entry => (int)entry.UserGroup.UserId).Distinct().ToList();
+            
+            //Sum up all their individual expenses and create a list of MoneyOwedByUserGroupDto Objects
+            List<MoneyOwedByUserGroupDto> ListOfMoneyOwedByUsersGroup = new List<MoneyOwedByUserGroupDto>();
+
+            foreach (var UserID in DistinctUserIDs)
+            {
+                double TotalAmountOwed = (double)AllExpensesQuery.Where(row => row.UserGroup.UserId == UserID)
+                    .Sum(entries => entries.Amount);
+                MoneyOwedByUserGroupDto MoneyOwedByCurrentUser = new MoneyOwedByUserGroupDto
+                {
+                    UserID = UserID,
+                    GroupID = GroupID,
+                    AmountPaidDuringGroup = TotalAmountOwed
+                };
+                ListOfMoneyOwedByUsersGroup.Add(MoneyOwedByCurrentUser);
+            }
+            
+            //Calculate the group's total expenditure
+            double GroupsTotalExpenditure = 0;
+            double GroupSize = 0;
+
+            foreach (var UsersExpenditure in ListOfMoneyOwedByUsersGroup)
+            {
+                GroupsTotalExpenditure += UsersExpenditure.AmountPaidDuringGroup;
+                GroupSize++;
+            }
+
+            double AverageAmountPaidDuringGroup = GroupsTotalExpenditure / GroupSize;
+            
+            foreach(var UsersExpenditure in ListOfMoneyOwedByUsersGroup)
+            {
+                UsersExpenditure.FinalAmountOwed = AverageAmountPaidDuringGroup - UsersExpenditure.AmountPaidDuringGroup;
+            }
+            
+            //Calculate AmountAlreadyPaid by every UserGroup
+            List<InPayment> ListOfInPayments = await context.InPayments
+                .Include(InPayment => InPayment.UserGroup)
+                .Where(UserGroup => UserGroup.UserGroup.GroupId == GroupID)
+                .ToListAsync();
+            
+            //Get the list of unique UserIDs in the ListOfInPayments
+            List<int> ListOfDistinctInPaymentusers =
+                ListOfInPayments.Select(entry => (int)entry.UserGroup.UserId).Distinct().ToList();
+            
+            //Calculate the total in payments for each user in the group
+            //Assign it to the correct MoneyOwedByUserGroupDto for that user
+
+            foreach (var UserID in ListOfDistinctInPaymentusers)
+            {
+                //Total for that user
+                double TotalInPayment = (double)ListOfInPayments.Where(row => row.UserGroup.UserId == UserID)
+                    .Sum(entries => entries.Amount);
+                
+                //Find the user in the ListOfMoneyOwedByUsersGroup and assign the AmountAlreadyPaid to TotalPayment
+                MoneyOwedByUserGroupDto CurrentUser = ListOfMoneyOwedByUsersGroup.Single(user => user.UserID == UserID);
+                CurrentUser.AmountAlreadyPaid = TotalInPayment;
+            }
+            
+            //Recalculate the FinalAmountOwed by subtracting the AmountAlreadyPaid from it
+
+            foreach (var user in ListOfMoneyOwedByUsersGroup)
+            {
+                user.FinalAmountOwed -= user.AmountAlreadyPaid;
+            }
+            
+            return Ok(ListOfMoneyOwedByUsersGroup);
         }
         
 
@@ -357,7 +434,9 @@ namespace WinterProjectAPIV3.Controllers
                 GroupID = (int)record.GroupId;
             }
             //Using the GroupID, query for all expenditures in the group
+         
             return await CalculateIndividualSharesInGroup(GroupID);
+           
         }
         
 
